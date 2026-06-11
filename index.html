@@ -5,25 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Inventario Industrial</title>
 <style>
-  body { margin:0; font-family:Arial, sans-serif; background:#111; color:#fff; text-align:center; }
+  body { margin:0; font-family:Arial, sans-serif; background:#111; color:#fff; text-align:center; transition: background 0.3s, color 0.3s; }
+  
+  /* Modo claro */
+  body.modo-claro { background: #f0f0f0; color: #111; }
+  body.modo-claro #status { background: #ddd; color: #111; }
+  body.modo-claro th { background: #ccc; color: #111; border-color: #999; }
+  body.modo-claro td { border-color: #999; color: #111; }
+  body.modo-claro #pantallaSesion { background: #e0e0e0; color: #111; }
+  body.modo-claro button { background: #007bff; color: #fff; }
+  body.modo-claro #toast { background: #333; color: #fff; border-color: #666; }
+  body.modo-claro input, body.modo-claro #ubicacionInput { background: #fff; color: #111; border: 1px solid #ccc; }
+  
+  /* Botón modo oscuro/claro */
+  .btn-modo { position: fixed; top: 10px; right: 10px; width: auto; padding: 8px 12px; font-size: 0.9rem; background: #555; z-index: 1000; margin: 0; border-radius: 20px; }
+  
+  /* Buscador */
+  .buscador-container { margin: 15px auto; width: 90%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  #buscadorInput { flex: 1; min-width: 150px; padding: 10px; font-size: 1rem; border-radius: 6px; border: none; background: #333; color: #fff; }
+  body.modo-claro #buscadorInput { background: #fff; color: #111; border: 1px solid #ccc; }
+  #btnBuscar, #btnLimpiarBusqueda { width: auto; padding: 10px 15px; margin: 0; font-size: 0.9rem; }
+  
   #video { width:100%; max-height:40vh; background:#000; }
   #status { font-size:1.1rem; padding:10px; background:#222; margin-bottom:10px; }
-  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; }
+  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; cursor: pointer; }
   #fileInput { margin:15px 0; }
-  #tabla { width:100%; margin-top:18px; font-size:1.02rem; }
+  #tabla { width:100%; margin-top:18px; font-size:1.02rem; overflow-x: auto; }
   table { width:100%; border-collapse:collapse; margin-top:10px; }
   th, td { border:1px solid #444; padding:8px; }
   th { background:#333; }
   #cantidadInput { width:80px; font-size:1.05rem; padding:5px; }
   #pantallaSesion { padding:18px; background:#222; }
   #ubicacionInput { width:90%; padding:10px; font-size:1.05rem; margin-top:10px; border-radius:6px; border:none; }
-  /* Toast breve opcional (no mostrado por defecto) */
-  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; }
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; z-index: 1000; }
+  
+  /* Resaltado de búsqueda */
+  .resaltado { background-color: #ffeb3b; color: #000; }
+  body.modo-claro .resaltado { background-color: #ffc107; color: #000; }
 </style>
 </head>
 <body>
 
-<!-- TOAST BREVE (opcional; no aparece por defecto) -->
+<!-- BOTÓN MODO OSCURO/CLARO -->
+<button class="btn-modo" id="btnModo" onclick="toggleModo()">🌞 Modo claro</button>
+
+<!-- TOAST BREVE -->
 <div id="toast" aria-hidden="true">Sonido activado</div>
 
 <!-- PANTALLA DE SESIÓN -->
@@ -48,6 +74,14 @@
   <hr>
   <h3>📁 Cargar maestro CSV</h3>
   <input type="file" id="fileInput" accept=".csv" />
+  
+  <!-- BUSCADOR -->
+  <div class="buscador-container">
+    <input type="text" id="buscadorInput" placeholder="🔍 Buscar producto (código o descripción)" />
+    <button id="btnBuscar">Buscar</button>
+    <button id="btnLimpiarBusqueda" style="background:#555;">Limpiar</button>
+  </div>
+  
   <h3>📥 Registro</h3>
   Cantidad: <input type="number" id="cantidadInput" value="1" min="1" onclick="this.select()" />
   <div id="descripcionProducto" style="margin-top:10px; font-size:1.05rem; color:#0f0;"></div>
@@ -70,6 +104,9 @@ const toast = document.getElementById('toast');
 
 let maestro = {};
 let inventario = [];
+let inventarioFiltrado = []; // Para búsqueda
+let busquedaActiva = false;
+let textoBusqueda = '';
 
 let ultimoCodigo = '';
 let detector = null;
@@ -77,6 +114,154 @@ let puedeEscanear = true;
 
 let sesionConUbicacion = false;
 let ubicacionActual = '';
+
+/* ------------------------------
+   GUARDADO AUTOMÁTICO (localStorage)
+--------------------------------*/
+const STORAGE_KEY = 'inventario_industrial';
+
+function guardarInventario() {
+  const data = {
+    inventario: inventario,
+    sesionConUbicacion: sesionConUbicacion,
+    ultimaActualizacion: new Date().toISOString()
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  console.log('💾 Inventario guardado automáticamente');
+}
+
+function cargarInventarioGuardado() {
+  const guardado = localStorage.getItem(STORAGE_KEY);
+  if (guardado) {
+    try {
+      const data = JSON.parse(guardado);
+      if (data.inventario && Array.isArray(data.inventario)) {
+        inventario = data.inventario;
+        console.log('📂 Inventario cargado desde localStorage:', inventario.length, 'items');
+        return true;
+      }
+    } catch(e) {
+      console.warn('Error al cargar guardado:', e);
+    }
+  }
+  return false;
+}
+
+function limpiarInventarioGuardado() {
+  localStorage.removeItem(STORAGE_KEY);
+  console.log('🗑️ Inventario guardado eliminado');
+}
+
+// Sobrescribir actualizarTabla para incluir guardado automático
+const originalActualizarTabla = actualizarTabla;
+function actualizarTablaConGuardado() {
+  originalActualizarTabla();
+  guardarInventario();
+}
+actualizarTabla = actualizarTablaConGuardado;
+
+/* ------------------------------
+   BUSCADOR
+--------------------------------*/
+function buscarEnInventario() {
+  const busqueda = document.getElementById('buscadorInput').value.trim().toLowerCase();
+  textoBusqueda = busqueda;
+  
+  if (busqueda === '') {
+    busquedaActiva = false;
+    inventarioFiltrado = [];
+    mostrarTablaInventario(inventario);
+    return;
+  }
+  
+  busquedaActiva = true;
+  inventarioFiltrado = inventario.filter(item => 
+    item.codigo.toLowerCase().includes(busqueda) || 
+    item.descripcion.toLowerCase().includes(busqueda)
+  );
+  
+  mostrarTablaInventario(inventarioFiltrado, busqueda);
+}
+
+function limpiarBusqueda() {
+  document.getElementById('buscadorInput').value = '';
+  busquedaActiva = false;
+  textoBusqueda = '';
+  inventarioFiltrado = [];
+  mostrarTablaInventario(inventario);
+  showToast('Búsqueda limpiada', 1000);
+}
+
+function mostrarTablaInventario(data, resaltarTexto = '') {
+  let html = '<table><tr><th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
+  
+  data.forEach(item => {
+    let codigoMostrar = item.codigo;
+    let descMostrar = item.descripcion;
+    
+    // Resaltar texto si hay búsqueda
+    if (resaltarTexto && resaltarTexto !== '') {
+      const regex = new RegExp(`(${resaltarTexto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      codigoMostrar = item.codigo.replace(regex, '<span class="resaltado">$1</span>');
+      descMostrar = item.descripcion.replace(regex, '<span class="resaltado">$1</span>');
+    }
+    
+    html += `<tr>
+      <td>${codigoMostrar}</td>
+      <td>${descMostrar}</td>
+      <td>${item.cantidad}</td>
+      ${sesionConUbicacion ? `<td>${item.ubicacion}</td>` : ''}
+    </tr>`;
+  });
+  
+  if (data.length === 0 && resaltarTexto) {
+    html += '<tr><td colspan="3" style="text-align:center">❌ No se encontraron resultados</td></tr>';
+  } else if (data.length === 0) {
+    html += '<tr><td colspan="3" style="text-align:center">📭 Inventario vacío</td></tr>';
+  }
+  
+  html += '</table>';
+  document.getElementById('tabla').innerHTML = html;
+}
+
+// Sobrescribir actualizarTabla original
+function actualizarTablaOriginal() {
+  if (busquedaActiva) {
+    buscarEnInventario();
+  } else {
+    mostrarTablaInventario(inventario);
+  }
+}
+
+window.actualizarTabla = actualizarTablaOriginal;
+
+/* ------------------------------
+   MODO OSCURO/CLARO
+--------------------------------*/
+function toggleModo() {
+  const body = document.body;
+  const btn = document.getElementById('btnModo');
+  
+  if (body.classList.contains('modo-claro')) {
+    body.classList.remove('modo-claro');
+    btn.textContent = '🌞 Modo claro';
+    localStorage.setItem('modo_app', 'oscuro');
+    showToast('Modo oscuro activado', 800);
+  } else {
+    body.classList.add('modo-claro');
+    btn.textContent = '🌙 Modo oscuro';
+    localStorage.setItem('modo_app', 'claro');
+    showToast('Modo claro activado', 800);
+  }
+}
+
+function cargarModoGuardado() {
+  const modoGuardado = localStorage.getItem('modo_app');
+  if (modoGuardado === 'claro') {
+    document.body.classList.add('modo-claro');
+    document.getElementById('btnModo').textContent = '🌙 Modo oscuro';
+  }
+}
 
 /* ------------------------------
    AUDIO (WebAudio) Y DESBLOQUEO
@@ -88,25 +273,20 @@ function crearAudioContext() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 }
 
-/* desbloquea audio con gesto del usuario; se llama desde los botones de sesión */
 async function unlockAudioIfNeeded() {
   if (audioUnlocked) return;
   crearAudioContext();
   try {
     await audioCtx.resume();
     audioUnlocked = true;
-    // confirmación sonora breve
     playBeep(1200, 0.06);
     setTimeout(()=> playBeep(900, 0.06, 'square'), 120);
-    // mostrar toast breve (opcional, profesional y no intrusivo)
     showToast('Sonido activado', 1100);
   } catch (e) {
     console.warn('No se pudo activar audio:', e);
-    // no mostramos nada visible; el sistema sigue funcionando sin sonido
   }
 }
 
-/* reproducir beep */
 function playBeep(freq = 1000, duration = 0.08, type = 'sine') {
   if (!audioCtx || !audioUnlocked) return;
   try {
@@ -128,7 +308,6 @@ function playBeep(freq = 1000, duration = 0.08, type = 'sine') {
   }
 }
 
-/* mostrar toast breve */
 function showToast(text, ms = 1000) {
   toast.textContent = text;
   toast.style.display = 'block';
@@ -136,24 +315,30 @@ function showToast(text, ms = 1000) {
 }
 
 /* ------------------------------
-   SESIÓN: SÍ / NO UBICACIÓN (gesto desbloquea audio)
+   SESIÓN
 --------------------------------*/
 function iniciarSesion(conUbicacion) {
-  // desbloqueo de audio con el gesto del usuario
   unlockAudioIfNeeded();
   sesionConUbicacion = conUbicacion;
+  
+  // Cargar inventario guardado al iniciar sesión
+  const cargado = cargarInventarioGuardado();
+  if (cargado && inventario.length > 0) {
+    showToast(`📦 ${inventario.length} productos cargados automáticamente`, 2000);
+  }
+  
   if (conUbicacion) {
     document.getElementById('campoUbicacion').style.display = 'block';
   } else {
     document.getElementById('pantallaSesion').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     statusDiv.textContent = 'Cargando cámara…';
+    actualizarTabla();
     iniciarCamara();
   }
 }
 
 function confirmarUbicacion() {
-  // desbloqueo de audio con el gesto del usuario
   unlockAudioIfNeeded();
   const txt = document.getElementById('ubicacionInput').value.trim();
   if (txt === '') {
@@ -164,11 +349,12 @@ function confirmarUbicacion() {
   document.getElementById('pantallaSesion').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   statusDiv.textContent = 'Cargando cámara…';
+  actualizarTabla();
   iniciarCamara();
 }
 
 /* ------------------------------
-   INICIAR CÁMARA TRASERA
+   CÁMARA
 --------------------------------*/
 async function iniciarCamara() {
   try {
@@ -176,7 +362,6 @@ async function iniciarCamara() {
     video.srcObject = stream;
     statusDiv.textContent = 'Cámara activa';
   } catch (e) {
-    // fallback sin exact
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       video.srcObject = stream;
@@ -189,7 +374,7 @@ async function iniciarCamara() {
 }
 
 /* ------------------------------
-   CARGAR MAESTRO CSV
+   MAESTRO CSV
 --------------------------------*/
 document.getElementById('fileInput').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -213,7 +398,7 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
 });
 
 /* ------------------------------
-   PREPARAR DETECTOR
+   DETECTOR
 --------------------------------*/
 async function prepararDetector() {
   if ('BarcodeDetector' in window) {
@@ -224,9 +409,6 @@ async function prepararDetector() {
 }
 prepararDetector();
 
-/* ------------------------------
-   ESCANEO AUTOMÁTICO (debounce por código)
---------------------------------*/
 const lastDetected = new Map();
 const DETECT_DEBOUNCE_MS = 800;
 
@@ -250,9 +432,6 @@ setInterval(async () => {
   }
 }, 250);
 
-/* ------------------------------
-   PROCESAR CÓDIGO
---------------------------------*/
 function procesarCodigo(codigo) {
   if (!maestro[codigo]) {
     descripcionDiv.style.color = '#f00';
@@ -264,7 +443,7 @@ function procesarCodigo(codigo) {
 }
 
 /* ------------------------------
-   REGISTRAR INVENTARIO (suma si existe)
+   REGISTRAR
 --------------------------------*/
 document.getElementById('btnRegistrar').addEventListener('click', () => {
   if (!ultimoCodigo || !maestro[ultimoCodigo]) {
@@ -287,22 +466,11 @@ document.getElementById('btnRegistrar').addEventListener('click', () => {
   actualizarTabla();
   descripcionDiv.textContent = '';
   ultimoCodigo = '';
+  showToast(`✅ Registrado: ${cantidad} unidad(es)`, 1200);
 });
 
 /* ------------------------------
-   TABLA
---------------------------------*/
-function actualizarTabla() {
-  let html = '<table><tr><th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
-  inventario.forEach(item => {
-    html += `<tr><td>${item.codigo}</td><td>${item.descripcion}</td><td>${item.cantidad}</td>` + (sesionConUbicacion ? `<td>${item.ubicacion}</td>` : '') + '</tr>';
-  });
-  html += '</table>';
-  document.getElementById('tabla').innerHTML = html;
-}
-
-/* ------------------------------
-   EXPORTAR CSV
+   EXPORTAR
 --------------------------------*/
 document.getElementById('btnExportar').addEventListener('click', () => {
   let csv = sesionConUbicacion ? 'codigo,descripcion,cantidad,ubicacion\n' : 'codigo,descripcion,cantidad\n';
@@ -315,6 +483,7 @@ document.getElementById('btnExportar').addEventListener('click', () => {
   a.href = url;
   a.download = 'inventario.csv';
   a.click();
+  showToast('📄 Inventario exportado', 1000);
 });
 
 /* ------------------------------
@@ -323,14 +492,26 @@ document.getElementById('btnExportar').addEventListener('click', () => {
 document.getElementById('btnLimpiar').addEventListener('click', () => {
   if (confirm('¿Seguro que deseas borrar todo el inventario?')) {
     inventario = [];
+    limpiarInventarioGuardado();
     actualizarTabla();
+    showToast('🗑️ Inventario limpiado', 1000);
   }
 });
 
 /* ------------------------------
-   Inicializar contexto de audio en background (no resume)
+   EVENTOS BUSCADOR
+--------------------------------*/
+document.getElementById('btnBuscar').addEventListener('click', buscarEnInventario);
+document.getElementById('btnLimpiarBusqueda').addEventListener('click', limpiarBusqueda);
+document.getElementById('buscadorInput').addEventListener('keyup', (e) => {
+  if (e.key === 'Enter') buscarEnInventario();
+});
+
+/* ------------------------------
+   INICIALIZACIÓN
 --------------------------------*/
 crearAudioContext();
+cargarModoGuardado();
 </script>
 </body>
 </html>
