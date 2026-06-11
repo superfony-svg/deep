@@ -7,7 +7,7 @@
 <style>
   body { margin:0; font-family:Arial, sans-serif; background:#111; color:#fff; text-align:center; transition: background 0.3s, color 0.3s; }
   
-  /* Modo claro - NUEVO */
+  /* Modo claro */
   body.modo-claro { background: #f0f0f0; color: #111; }
   body.modo-claro #status { background: #ddd; color: #111; }
   body.modo-claro th { background: #ccc; color: #111; border-color: #999; }
@@ -17,36 +17,45 @@
   body.modo-claro #toast { background: #333; color: #fff; border-color: #666; }
   body.modo-claro input, body.modo-claro #ubicacionInput { background: #fff; color: #111; border: 1px solid #ccc; }
   
-  /* Botón modo oscuro/claro - NUEVO */
+  /* Botón modo oscuro/claro */
   .btn-modo { position: fixed; top: 10px; right: 10px; width: auto; padding: 8px 12px; font-size: 0.9rem; background: #555; z-index: 1000; margin: 0; border-radius: 20px; }
   
-  /* Buscador - NUEVO */
+  /* Buscador */
   .buscador-container { margin: 15px auto; width: 90%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
   #buscadorInput { flex: 1; min-width: 150px; padding: 10px; font-size: 1rem; border-radius: 6px; border: none; background: #333; color: #fff; }
   body.modo-claro #buscadorInput { background: #fff; color: #111; border: 1px solid #ccc; }
   #btnBuscar, #btnLimpiarBusqueda { width: auto; padding: 10px 15px; margin: 0; font-size: 0.9rem; }
   
+  /* Resultados de búsqueda en maestro */
+  .resultados-busqueda { margin-top: 10px; max-height: 200px; overflow-y: auto; background: #1a1a1a; border-radius: 8px; display: none; }
+  body.modo-claro .resultados-busqueda { background: #e0e0e0; }
+  .resultado-item { padding: 8px 12px; border-bottom: 1px solid #444; cursor: pointer; text-align: left; display: flex; justify-content: space-between; }
+  .resultado-item:hover { background: #007bff; color: #fff; }
+  .resultado-codigo { font-weight: bold; font-family: monospace; }
+  .resultado-descripcion { margin-left: 10px; }
+  body.modo-claro .resultado-item { border-bottom-color: #bbb; }
+  
   .resaltado { background-color: #ffeb3b; color: #000; }
   body.modo-claro .resaltado { background-color: #ffc107; color: #000; }
   
-  /* ESTILOS ORIGINALES - SIN CAMBIOS */
+  /* ESTILOS ORIGINALES */
   #video { width:100%; max-height:40vh; background:#000; }
   #status { font-size:1.1rem; padding:10px; background:#222; margin-bottom:10px; }
-  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; }
+  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; cursor: pointer; }
   #fileInput { margin:15px 0; }
-  #tabla { width:100%; margin-top:18px; font-size:1.02rem; }
+  #tabla { width:100%; margin-top:18px; font-size:1.02rem; overflow-x: auto; }
   table { width:100%; border-collapse:collapse; margin-top:10px; }
   th, td { border:1px solid #444; padding:8px; }
   th { background:#333; }
   #cantidadInput { width:80px; font-size:1.05rem; padding:5px; }
   #pantallaSesion { padding:18px; background:#222; }
   #ubicacionInput { width:90%; padding:10px; font-size:1.05rem; margin-top:10px; border-radius:6px; border:none; }
-  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; }
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; z-index: 1000; }
 </style>
 </head>
 <body>
 
-<!-- BOTÓN MODO OSCURO/CLARO - NUEVO -->
+<!-- BOTÓN MODO OSCURO/CLARO -->
 <button class="btn-modo" id="btnModo" onclick="toggleModo()">🌞 Modo claro</button>
 
 <!-- TOAST BREVE -->
@@ -75,12 +84,14 @@
   <h3>📁 Cargar maestro CSV</h3>
   <input type="file" id="fileInput" accept=".csv" />
   
-  <!-- BUSCADOR - NUEVO -->
+  <!-- BUSCADOR EN MAESTRO -->
+  <h3>🔍 Buscar producto en catálogo</h3>
   <div class="buscador-container">
-    <input type="text" id="buscadorInput" placeholder="🔍 Buscar producto (código o descripción)" />
+    <input type="text" id="buscadorInput" placeholder="Buscar por código o descripción..." />
     <button id="btnBuscar">Buscar</button>
     <button id="btnLimpiarBusqueda" style="background:#555;">Limpiar</button>
   </div>
+  <div id="resultadosBusqueda" class="resultados-busqueda"></div>
   
   <h3>📥 Registro</h3>
   Cantidad: <input type="number" id="cantidadInput" value="1" min="1" onclick="this.select()" />
@@ -95,7 +106,7 @@
 
 <script>
 /* ------------------------------
-   VARIABLES GLOBALES (ORIGINAL - SIN CAMBIOS)
+   VARIABLES GLOBALES (ORIGINAL)
 --------------------------------*/
 const video = document.getElementById('video');
 const statusDiv = document.getElementById('status');
@@ -113,7 +124,7 @@ let sesionConUbicacion = false;
 let ubicacionActual = '';
 
 /* ------------------------------
-   NUEVO: GUARDADO AUTOMÁTICO (localStorage)
+   GUARDADO AUTOMÁTICO (localStorage)
 --------------------------------*/
 const STORAGE_KEY = 'inventario_industrial';
 
@@ -134,67 +145,69 @@ function cargarInventarioGuardado() {
 }
 
 /* ------------------------------
-   NUEVO: BUSCADOR
+   BUSCADOR EN MAESTRO (CORREGIDO)
 --------------------------------*/
-let busquedaActiva = false;
-let textoBusqueda = '';
-
-function buscarEnInventario() {
+function buscarEnMaestro() {
   const busqueda = document.getElementById('buscadorInput').value.trim().toLowerCase();
-  textoBusqueda = busqueda;
+  const resultadosDiv = document.getElementById('resultadosBusqueda');
   
-  if (busqueda === '') {
-    busquedaActiva = false;
-    actualizarTabla();
+  if (busqueda === '' || Object.keys(maestro).length === 0) {
+    resultadosDiv.style.display = 'none';
+    resultadosDiv.innerHTML = '';
     return;
   }
   
-  busquedaActiva = true;
-  const filtrados = inventario.filter(item => 
-    item.codigo.toLowerCase().includes(busqueda) || 
-    item.descripcion.toLowerCase().includes(busqueda)
-  );
-  mostrarTablaConResaltado(filtrados, busqueda);
-}
-
-function limpiarBusqueda() {
-  document.getElementById('buscadorInput').value = '';
-  busquedaActiva = false;
-  actualizarTabla();
-  showToast('Búsqueda limpiada', 1000);
-}
-
-function mostrarTablaConResaltado(data, resaltarTexto) {
-  let html = '<table> hilab<th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
-  
-  data.forEach(item => {
-    let codigoMostrar = item.codigo;
-    let descMostrar = item.descripcion;
-    
-    if (resaltarTexto) {
-      const regex = new RegExp(`(${resaltarTexto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-      codigoMostrar = item.codigo.replace(regex, '<span class="resaltado">$1</span>');
-      descMostrar = item.descripcion.replace(regex, '<span class="resaltado">$1</span>');
+  // Buscar en el maestro (todos los productos del CSV)
+  const resultados = [];
+  for (const [codigo, descripcion] of Object.entries(maestro)) {
+    if (codigo.toLowerCase().includes(busqueda) || descripcion.toLowerCase().includes(busqueda)) {
+      resultados.push({ codigo, descripcion });
     }
-    
-    html += `<tr>
-      <td>${codigoMostrar}</td>
-      <td>${descMostrar}</td>
-      <td>${item.cantidad}</td>
-      ${sesionConUbicacion ? `<td>${item.ubicacion}</td>` : ''}
-    </tr>`;
-  });
-  
-  if (data.length === 0 && resaltarTexto) {
-    html += '<tr><td colspan="3" style="text-align:center">❌ No se encontraron resultados</td></tr>';
   }
   
-  html += '</table>';
-  document.getElementById('tabla').innerHTML = html;
+  if (resultados.length === 0) {
+    resultadosDiv.innerHTML = '<div style="padding: 10px; text-align: center;">❌ No se encontraron productos</div>';
+    resultadosDiv.style.display = 'block';
+    return;
+  }
+  
+  // Mostrar resultados
+  let html = '';
+  resultados.forEach(res => {
+    html += `
+      <div class="resultado-item" onclick="seleccionarProductoMaestro('${res.codigo.replace(/'/g, "\\'")}', '${res.descripcion.replace(/'/g, "\\'")}')">
+        <span class="resultado-codigo">${res.codigo}</span>
+        <span class="resultado-descripcion">${res.descripcion}</span>
+      </div>
+    `;
+  });
+  resultadosDiv.innerHTML = html;
+  resultadosDiv.style.display = 'block';
+}
+
+function seleccionarProductoMaestro(codigo, descripcion) {
+  // Seleccionar el producto como si lo hubiera escaneado
+  ultimoCodigo = codigo;
+  descripcionDiv.style.color = '#0f0';
+  descripcionDiv.textContent = '✔ ' + descripcion;
+  
+  // Limpiar búsqueda y ocultar resultados
+  document.getElementById('buscadorInput').value = '';
+  document.getElementById('resultadosBusqueda').style.display = 'none';
+  document.getElementById('resultadosBusqueda').innerHTML = '';
+  
+  showToast(`✅ Seleccionado: ${descripcion}`, 1500);
+  playBeep(1200, 0.06);
+}
+
+function limpiarBusquedaMaestro() {
+  document.getElementById('buscadorInput').value = '';
+  document.getElementById('resultadosBusqueda').style.display = 'none';
+  document.getElementById('resultadosBusqueda').innerHTML = '';
 }
 
 /* ------------------------------
-   NUEVO: MODO OSCURO/CLARO
+   MODO OSCURO/CLARO
 --------------------------------*/
 function toggleModo() {
   const body = document.body;
@@ -219,7 +232,7 @@ function cargarModoGuardado() {
 }
 
 /* ------------------------------
-   AUDIO (ORIGINAL - SIN CAMBIOS)
+   AUDIO (ORIGINAL)
 --------------------------------*/
 let audioCtx = null;
 let audioUnlocked = false;
@@ -270,13 +283,12 @@ function showToast(text, ms = 1000) {
 }
 
 /* ------------------------------
-   SESIÓN (ORIGINAL - SIN CAMBIOS)
+   SESIÓN (ORIGINAL)
 --------------------------------*/
 function iniciarSesion(conUbicacion) {
   unlockAudioIfNeeded();
   sesionConUbicacion = conUbicacion;
   
-  // NUEVO: cargar inventario guardado al iniciar
   cargarInventarioGuardado();
   
   if (conUbicacion) {
@@ -306,7 +318,7 @@ function confirmarUbicacion() {
 }
 
 /* ------------------------------
-   CÁMARA (ORIGINAL - SIN CAMBIOS)
+   CÁMARA (ORIGINAL)
 --------------------------------*/
 async function iniciarCamara() {
   try {
@@ -326,7 +338,7 @@ async function iniciarCamara() {
 }
 
 /* ------------------------------
-   MAESTRO CSV (ORIGINAL - SIN CAMBIOS)
+   MAESTRO CSV (ORIGINAL)
 --------------------------------*/
 document.getElementById('fileInput').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -350,7 +362,7 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
 });
 
 /* ------------------------------
-   DETECTOR (ORIGINAL - SIN CAMBIOS)
+   DETECTOR (ORIGINAL)
 --------------------------------*/
 async function prepararDetector() {
   if ('BarcodeDetector' in window) {
@@ -395,11 +407,11 @@ function procesarCodigo(codigo) {
 }
 
 /* ------------------------------
-   REGISTRAR (ORIGINAL - MODIFICADO solo para guardar)
+   REGISTRAR (ORIGINAL)
 --------------------------------*/
 document.getElementById('btnRegistrar').addEventListener('click', () => {
   if (!ultimoCodigo || !maestro[ultimoCodigo]) {
-    alert('No hay código válido escaneado.');
+    alert('No hay código válido escaneado o seleccionado.');
     return;
   }
   const cantidad = parseInt(document.getElementById('cantidadInput').value) || 1;
@@ -415,22 +427,17 @@ document.getElementById('btnRegistrar').addEventListener('click', () => {
     });
   }
   if (audioUnlocked) playBeep(900, 0.09, 'square');
-  guardarInventario(); // NUEVO: guardar después de registrar
+  guardarInventario();
   actualizarTabla();
   descripcionDiv.textContent = '';
   ultimoCodigo = '';
 });
 
 /* ------------------------------
-   TABLA (ORIGINAL - MODIFICADO para soportar búsqueda)
+   TABLA (ORIGINAL)
 --------------------------------*/
 function actualizarTabla() {
-  if (busquedaActiva) {
-    buscarEnInventario();
-    return;
-  }
-  
-  let html = '<table> bacilo<th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
+  let html = '能able competenta<th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
   inventario.forEach(item => {
     html += `<tr>
       <td>${item.codigo}</td>
@@ -442,12 +449,12 @@ function actualizarTabla() {
   if (inventario.length === 0) {
     html += '<tr><td colspan="3" style="text-align:center">📭 Inventario vacío</td></tr>';
   }
-  html += '</table>';
+  html += '赶tables>';
   document.getElementById('tabla').innerHTML = html;
 }
 
 /* ------------------------------
-   EXPORTAR (ORIGINAL - SIN CAMBIOS)
+   EXPORTAR (ORIGINAL)
 --------------------------------*/
 document.getElementById('btnExportar').addEventListener('click', () => {
   let csv = sesionConUbicacion ? 'codigo,descripcion,cantidad,ubicacion\n' : 'codigo,descripcion,cantidad\n';
@@ -463,23 +470,23 @@ document.getElementById('btnExportar').addEventListener('click', () => {
 });
 
 /* ------------------------------
-   LIMPIAR (ORIGINAL - MODIFICADO para limpiar guardado)
+   LIMPIAR (ORIGINAL)
 --------------------------------*/
 document.getElementById('btnLimpiar').addEventListener('click', () => {
   if (confirm('¿Seguro que deseas borrar todo el inventario?')) {
     inventario = [];
-    localStorage.removeItem(STORAGE_KEY); // NUEVO: limpiar guardado
+    localStorage.removeItem(STORAGE_KEY);
     actualizarTabla();
   }
 });
 
 /* ------------------------------
-   EVENTOS BUSCADOR - NUEVO
+   EVENTOS BUSCADOR MAESTRO
 --------------------------------*/
-document.getElementById('btnBuscar').addEventListener('click', buscarEnInventario);
-document.getElementById('btnLimpiarBusqueda').addEventListener('click', limpiarBusqueda);
+document.getElementById('btnBuscar').addEventListener('click', buscarEnMaestro);
+document.getElementById('btnLimpiarBusqueda').addEventListener('click', limpiarBusquedaMaestro);
 document.getElementById('buscadorInput').addEventListener('keyup', (e) => {
-  if (e.key === 'Enter') buscarEnInventario();
+  if (e.key === 'Enter') buscarEnMaestro();
 });
 
 /* ------------------------------
