@@ -7,7 +7,7 @@
 <style>
   body { margin:0; font-family:Arial, sans-serif; background:#111; color:#fff; text-align:center; transition: background 0.3s, color 0.3s; }
   
-  /* Modo claro */
+  /* Modo claro - NUEVO */
   body.modo-claro { background: #f0f0f0; color: #111; }
   body.modo-claro #status { background: #ddd; color: #111; }
   body.modo-claro th { background: #ccc; color: #111; border-color: #999; }
@@ -17,36 +17,36 @@
   body.modo-claro #toast { background: #333; color: #fff; border-color: #666; }
   body.modo-claro input, body.modo-claro #ubicacionInput { background: #fff; color: #111; border: 1px solid #ccc; }
   
-  /* Botón modo oscuro/claro */
+  /* Botón modo oscuro/claro - NUEVO */
   .btn-modo { position: fixed; top: 10px; right: 10px; width: auto; padding: 8px 12px; font-size: 0.9rem; background: #555; z-index: 1000; margin: 0; border-radius: 20px; }
   
-  /* Buscador */
+  /* Buscador - NUEVO */
   .buscador-container { margin: 15px auto; width: 90%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
   #buscadorInput { flex: 1; min-width: 150px; padding: 10px; font-size: 1rem; border-radius: 6px; border: none; background: #333; color: #fff; }
   body.modo-claro #buscadorInput { background: #fff; color: #111; border: 1px solid #ccc; }
   #btnBuscar, #btnLimpiarBusqueda { width: auto; padding: 10px 15px; margin: 0; font-size: 0.9rem; }
   
+  .resaltado { background-color: #ffeb3b; color: #000; }
+  body.modo-claro .resaltado { background-color: #ffc107; color: #000; }
+  
+  /* ESTILOS ORIGINALES - SIN CAMBIOS */
   #video { width:100%; max-height:40vh; background:#000; }
   #status { font-size:1.1rem; padding:10px; background:#222; margin-bottom:10px; }
-  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; cursor: pointer; }
+  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; }
   #fileInput { margin:15px 0; }
-  #tabla { width:100%; margin-top:18px; font-size:1.02rem; overflow-x: auto; }
+  #tabla { width:100%; margin-top:18px; font-size:1.02rem; }
   table { width:100%; border-collapse:collapse; margin-top:10px; }
   th, td { border:1px solid #444; padding:8px; }
   th { background:#333; }
   #cantidadInput { width:80px; font-size:1.05rem; padding:5px; }
   #pantallaSesion { padding:18px; background:#222; }
   #ubicacionInput { width:90%; padding:10px; font-size:1.05rem; margin-top:10px; border-radius:6px; border:none; }
-  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; z-index: 1000; }
-  
-  /* Resaltado de búsqueda */
-  .resaltado { background-color: #ffeb3b; color: #000; }
-  body.modo-claro .resaltado { background-color: #ffc107; color: #000; }
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; }
 </style>
 </head>
 <body>
 
-<!-- BOTÓN MODO OSCURO/CLARO -->
+<!-- BOTÓN MODO OSCURO/CLARO - NUEVO -->
 <button class="btn-modo" id="btnModo" onclick="toggleModo()">🌞 Modo claro</button>
 
 <!-- TOAST BREVE -->
@@ -75,7 +75,7 @@
   <h3>📁 Cargar maestro CSV</h3>
   <input type="file" id="fileInput" accept=".csv" />
   
-  <!-- BUSCADOR -->
+  <!-- BUSCADOR - NUEVO -->
   <div class="buscador-container">
     <input type="text" id="buscadorInput" placeholder="🔍 Buscar producto (código o descripción)" />
     <button id="btnBuscar">Buscar</button>
@@ -95,7 +95,7 @@
 
 <script>
 /* ------------------------------
-   VARIABLES GLOBALES
+   VARIABLES GLOBALES (ORIGINAL - SIN CAMBIOS)
 --------------------------------*/
 const video = document.getElementById('video');
 const statusDiv = document.getElementById('status');
@@ -104,9 +104,6 @@ const toast = document.getElementById('toast');
 
 let maestro = {};
 let inventario = [];
-let inventarioFiltrado = []; // Para búsqueda
-let busquedaActiva = false;
-let textoBusqueda = '';
 
 let ultimoCodigo = '';
 let detector = null;
@@ -116,91 +113,65 @@ let sesionConUbicacion = false;
 let ubicacionActual = '';
 
 /* ------------------------------
-   GUARDADO AUTOMÁTICO (localStorage)
+   NUEVO: GUARDADO AUTOMÁTICO (localStorage)
 --------------------------------*/
 const STORAGE_KEY = 'inventario_industrial';
 
 function guardarInventario() {
-  const data = {
-    inventario: inventario,
-    sesionConUbicacion: sesionConUbicacion,
-    ultimaActualizacion: new Date().toISOString()
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  console.log('💾 Inventario guardado automáticamente');
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(inventario));
 }
 
 function cargarInventarioGuardado() {
   const guardado = localStorage.getItem(STORAGE_KEY);
   if (guardado) {
     try {
-      const data = JSON.parse(guardado);
-      if (data.inventario && Array.isArray(data.inventario)) {
-        inventario = data.inventario;
-        console.log('📂 Inventario cargado desde localStorage:', inventario.length, 'items');
-        return true;
+      inventario = JSON.parse(guardado);
+      if (inventario.length > 0) {
+        setTimeout(() => showToast(`📦 ${inventario.length} productos cargados`, 2000), 500);
       }
-    } catch(e) {
-      console.warn('Error al cargar guardado:', e);
-    }
+    } catch(e) {}
   }
-  return false;
 }
-
-function limpiarInventarioGuardado() {
-  localStorage.removeItem(STORAGE_KEY);
-  console.log('🗑️ Inventario guardado eliminado');
-}
-
-// Sobrescribir actualizarTabla para incluir guardado automático
-const originalActualizarTabla = actualizarTabla;
-function actualizarTablaConGuardado() {
-  originalActualizarTabla();
-  guardarInventario();
-}
-actualizarTabla = actualizarTablaConGuardado;
 
 /* ------------------------------
-   BUSCADOR
+   NUEVO: BUSCADOR
 --------------------------------*/
+let busquedaActiva = false;
+let textoBusqueda = '';
+
 function buscarEnInventario() {
   const busqueda = document.getElementById('buscadorInput').value.trim().toLowerCase();
   textoBusqueda = busqueda;
   
   if (busqueda === '') {
     busquedaActiva = false;
-    inventarioFiltrado = [];
-    mostrarTablaInventario(inventario);
+    actualizarTabla();
     return;
   }
   
   busquedaActiva = true;
-  inventarioFiltrado = inventario.filter(item => 
+  const filtrados = inventario.filter(item => 
     item.codigo.toLowerCase().includes(busqueda) || 
     item.descripcion.toLowerCase().includes(busqueda)
   );
-  
-  mostrarTablaInventario(inventarioFiltrado, busqueda);
+  mostrarTablaConResaltado(filtrados, busqueda);
 }
 
 function limpiarBusqueda() {
   document.getElementById('buscadorInput').value = '';
   busquedaActiva = false;
-  textoBusqueda = '';
-  inventarioFiltrado = [];
-  mostrarTablaInventario(inventario);
+  actualizarTabla();
   showToast('Búsqueda limpiada', 1000);
 }
 
-function mostrarTablaInventario(data, resaltarTexto = '') {
-  let html = '<table><tr><th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
+function mostrarTablaConResaltado(data, resaltarTexto) {
+  let html = '<table> hilab<th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
   
   data.forEach(item => {
     let codigoMostrar = item.codigo;
     let descMostrar = item.descripcion;
     
-    // Resaltar texto si hay búsqueda
-    if (resaltarTexto && resaltarTexto !== '') {
+    if (resaltarTexto) {
       const regex = new RegExp(`(${resaltarTexto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
       codigoMostrar = item.codigo.replace(regex, '<span class="resaltado">$1</span>');
       descMostrar = item.descripcion.replace(regex, '<span class="resaltado">$1</span>');
@@ -216,27 +187,14 @@ function mostrarTablaInventario(data, resaltarTexto = '') {
   
   if (data.length === 0 && resaltarTexto) {
     html += '<tr><td colspan="3" style="text-align:center">❌ No se encontraron resultados</td></tr>';
-  } else if (data.length === 0) {
-    html += '<tr><td colspan="3" style="text-align:center">📭 Inventario vacío</td></tr>';
   }
   
   html += '</table>';
   document.getElementById('tabla').innerHTML = html;
 }
 
-// Sobrescribir actualizarTabla original
-function actualizarTablaOriginal() {
-  if (busquedaActiva) {
-    buscarEnInventario();
-  } else {
-    mostrarTablaInventario(inventario);
-  }
-}
-
-window.actualizarTabla = actualizarTablaOriginal;
-
 /* ------------------------------
-   MODO OSCURO/CLARO
+   NUEVO: MODO OSCURO/CLARO
 --------------------------------*/
 function toggleModo() {
   const body = document.body;
@@ -246,25 +204,22 @@ function toggleModo() {
     body.classList.remove('modo-claro');
     btn.textContent = '🌞 Modo claro';
     localStorage.setItem('modo_app', 'oscuro');
-    showToast('Modo oscuro activado', 800);
   } else {
     body.classList.add('modo-claro');
     btn.textContent = '🌙 Modo oscuro';
     localStorage.setItem('modo_app', 'claro');
-    showToast('Modo claro activado', 800);
   }
 }
 
 function cargarModoGuardado() {
-  const modoGuardado = localStorage.getItem('modo_app');
-  if (modoGuardado === 'claro') {
+  if (localStorage.getItem('modo_app') === 'claro') {
     document.body.classList.add('modo-claro');
     document.getElementById('btnModo').textContent = '🌙 Modo oscuro';
   }
 }
 
 /* ------------------------------
-   AUDIO (WebAudio) Y DESBLOQUEO
+   AUDIO (ORIGINAL - SIN CAMBIOS)
 --------------------------------*/
 let audioCtx = null;
 let audioUnlocked = false;
@@ -315,17 +270,14 @@ function showToast(text, ms = 1000) {
 }
 
 /* ------------------------------
-   SESIÓN
+   SESIÓN (ORIGINAL - SIN CAMBIOS)
 --------------------------------*/
 function iniciarSesion(conUbicacion) {
   unlockAudioIfNeeded();
   sesionConUbicacion = conUbicacion;
   
-  // Cargar inventario guardado al iniciar sesión
-  const cargado = cargarInventarioGuardado();
-  if (cargado && inventario.length > 0) {
-    showToast(`📦 ${inventario.length} productos cargados automáticamente`, 2000);
-  }
+  // NUEVO: cargar inventario guardado al iniciar
+  cargarInventarioGuardado();
   
   if (conUbicacion) {
     document.getElementById('campoUbicacion').style.display = 'block';
@@ -354,7 +306,7 @@ function confirmarUbicacion() {
 }
 
 /* ------------------------------
-   CÁMARA
+   CÁMARA (ORIGINAL - SIN CAMBIOS)
 --------------------------------*/
 async function iniciarCamara() {
   try {
@@ -374,7 +326,7 @@ async function iniciarCamara() {
 }
 
 /* ------------------------------
-   MAESTRO CSV
+   MAESTRO CSV (ORIGINAL - SIN CAMBIOS)
 --------------------------------*/
 document.getElementById('fileInput').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -398,7 +350,7 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
 });
 
 /* ------------------------------
-   DETECTOR
+   DETECTOR (ORIGINAL - SIN CAMBIOS)
 --------------------------------*/
 async function prepararDetector() {
   if ('BarcodeDetector' in window) {
@@ -443,7 +395,7 @@ function procesarCodigo(codigo) {
 }
 
 /* ------------------------------
-   REGISTRAR
+   REGISTRAR (ORIGINAL - MODIFICADO solo para guardar)
 --------------------------------*/
 document.getElementById('btnRegistrar').addEventListener('click', () => {
   if (!ultimoCodigo || !maestro[ultimoCodigo]) {
@@ -463,14 +415,39 @@ document.getElementById('btnRegistrar').addEventListener('click', () => {
     });
   }
   if (audioUnlocked) playBeep(900, 0.09, 'square');
+  guardarInventario(); // NUEVO: guardar después de registrar
   actualizarTabla();
   descripcionDiv.textContent = '';
   ultimoCodigo = '';
-  showToast(`✅ Registrado: ${cantidad} unidad(es)`, 1200);
 });
 
 /* ------------------------------
-   EXPORTAR
+   TABLA (ORIGINAL - MODIFICADO para soportar búsqueda)
+--------------------------------*/
+function actualizarTabla() {
+  if (busquedaActiva) {
+    buscarEnInventario();
+    return;
+  }
+  
+  let html = '<table> bacilo<th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
+  inventario.forEach(item => {
+    html += `<tr>
+      <td>${item.codigo}</td>
+      <td>${item.descripcion}</td>
+      <td>${item.cantidad}</td>
+      ${sesionConUbicacion ? `<td>${item.ubicacion}</td>` : ''}
+    </tr>`;
+  });
+  if (inventario.length === 0) {
+    html += '<tr><td colspan="3" style="text-align:center">📭 Inventario vacío</td></tr>';
+  }
+  html += '</table>';
+  document.getElementById('tabla').innerHTML = html;
+}
+
+/* ------------------------------
+   EXPORTAR (ORIGINAL - SIN CAMBIOS)
 --------------------------------*/
 document.getElementById('btnExportar').addEventListener('click', () => {
   let csv = sesionConUbicacion ? 'codigo,descripcion,cantidad,ubicacion\n' : 'codigo,descripcion,cantidad\n';
@@ -483,23 +460,21 @@ document.getElementById('btnExportar').addEventListener('click', () => {
   a.href = url;
   a.download = 'inventario.csv';
   a.click();
-  showToast('📄 Inventario exportado', 1000);
 });
 
 /* ------------------------------
-   LIMPIAR
+   LIMPIAR (ORIGINAL - MODIFICADO para limpiar guardado)
 --------------------------------*/
 document.getElementById('btnLimpiar').addEventListener('click', () => {
   if (confirm('¿Seguro que deseas borrar todo el inventario?')) {
     inventario = [];
-    limpiarInventarioGuardado();
+    localStorage.removeItem(STORAGE_KEY); // NUEVO: limpiar guardado
     actualizarTabla();
-    showToast('🗑️ Inventario limpiado', 1000);
   }
 });
 
 /* ------------------------------
-   EVENTOS BUSCADOR
+   EVENTOS BUSCADOR - NUEVO
 --------------------------------*/
 document.getElementById('btnBuscar').addEventListener('click', buscarEnInventario);
 document.getElementById('btnLimpiarBusqueda').addEventListener('click', limpiarBusqueda);
