@@ -1,3 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Inventario Industrial</title>
+<style>
+  body { margin:0; font-family:Arial, sans-serif; background:#111; color:#fff; text-align:center; transition: background 0.3s, color 0.3s; }
+  
+  /* Modo claro */
+  body.modo-claro { background: #f0f0f0; color: #111; }
+  body.modo-claro #status { background: #ddd; color: #111; }
+  body.modo-claro th { background: #ccc; color: #111; border-color: #999; }
+  body.modo-claro td { border-color: #999; color: #111; }
+  body.modo-claro #pantallaSesion { background: #e0e0e0; color: #111; }
+  body.modo-claro button { background: #007bff; color: #fff; }
+  body.modo-claro #toast { background: #333; color: #fff; border-color: #666; }
+  body.modo-claro input, body.modo-claro #ubicacionInput { background: #fff; color: #111; border: 1px solid #ccc; }
+  
+  /* Botón modo oscuro/claro */
+  .btn-modo { position: fixed; top: 10px; right: 10px; width: auto; padding: 8px 12px; font-size: 0.9rem; background: #555; z-index: 1000; margin: 0; border-radius: 20px; }
+  
+  /* Buscador */
+  .buscador-container { margin: 15px auto; width: 90%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  #buscadorInput { flex: 1; min-width: 150px; padding: 10px; font-size: 1rem; border-radius: 6px; border: none; background: #333; color: #fff; }
+  body.modo-claro #buscadorInput { background: #fff; color: #111; border: 1px solid #ccc; }
+  #btnBuscar, #btnLimpiarBusqueda { width: auto; padding: 10px 15px; margin: 0; font-size: 0.9rem; }
+  
+  /* Resultados de búsqueda en maestro */
+  .resultados-busqueda { margin-top: 10px; max-height: 200px; overflow-y: auto; background: #1a1a1a; border-radius: 8px; display: none; }
+  body.modo-claro .resultados-busqueda { background: #e0e0e0; }
+  .resultado-item { padding: 8px 12px; border-bottom: 1px solid #444; cursor: pointer; text-align: left; display: flex; justify-content: space-between; }
+  .resultado-item:hover { background: #007bff; color: #fff; }
+  .resultado-codigo { font-weight: bold; font-family: monospace; }
+  .resultado-descripcion { margin-left: 10px; }
+  body.modo-claro .resultado-item { border-bottom-color: #bbb; }
+  
+  /* ESTILOS ORIGINALES */
+  #video { width:100%; max-height:40vh; background:#000; }
+  #status { font-size:1.1rem; padding:10px; background:#222; margin-bottom:10px; }
+  button { width:90%; padding:12px; margin:8px 0; font-size:1.05rem; border:none; border-radius:8px; background:#007bff; color:#fff; cursor: pointer; }
+  #fileInput { margin:15px 0; }
+  #tabla { width:100%; margin-top:18px; font-size:1.02rem; overflow-x: auto; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th, td { border:1px solid #444; padding:8px; }
+  th { background:#333; }
+  #cantidadInput { width:80px; font-size:1.05rem; padding:5px; }
+  #pantallaSesion { padding:18px; background:#222; }
+  #ubicacionInput { width:90%; padding:10px; font-size:1.05rem; margin-top:10px; border-radius:6px; border:none; }
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; border:1px solid #444; display:none; font-size:0.95rem; z-index: 1000; }
+</style>
+</head>
+<body>
+
+<!-- BOTÓN MODO OSCURO/CLARO -->
+<button class="btn-modo" id="btnModo" onclick="toggleModo()">🌞 Modo claro</button>
+
+<!-- TOAST BREVE -->
+<div id="toast" aria-hidden="true">Sonido activado</div>
+
+<!-- PANTALLA DE SESIÓN -->
+<div id="pantallaSesion">
+  <h2>📍 Configurar sesión</h2>
+  <p>¿Quieres usar ubicación en esta sesión?</p>
+  <button id="btnSiUbic" onclick="iniciarSesion(true)">Sí, usar ubicación</button>
+  <button id="btnNoUbic" onclick="iniciarSesion(false)" style="background:#555;">No usar ubicación</button>
+
+  <div id="campoUbicacion" style="display:none;">
+    <h3>Introduce ubicación:</h3>
+    <input type="text" id="ubicacionInput" placeholder="Ej: Pasillo 3B" />
+    <button onclick="confirmarUbicacion()">Confirmar ubicación</button>
+  </div>
+</div>
+
+<!-- APP PRINCIPAL -->
+<div id="app" style="display:none;">
+  <h2>📦 Inventario Industrial</h2>
+  <div id="status">Esperando configuración de sesión…</div>
+  <video id="video" autoplay playsinline></video>
+  <hr>
+  <h3>📁 Cargar maestro CSV</h3>
+  <p style="font-size:0.85rem; color:#aaa;">Formato: IdArticulo,NombreArticulo,CodigoBarras,StockActual</p>
+  <input type="file" id="fileInput" accept=".csv" />
+  
+  <!-- BUSCADOR EN MAESTRO -->
+  <h3>🔍 Buscar producto en catálogo</h3>
+  <div class="buscador-container">
+    <input type="text" id="buscadorInput" placeholder="Buscar por código o nombre..." />
+    <button id="btnBuscar">Buscar</button>
+    <button id="btnLimpiarBusqueda" style="background:#555;">Limpiar</button>
+  </div>
+  <div id="resultadosBusqueda" class="resultados-busqueda"></div>
+  
+  <h3>📥 Registro</h3>
+  Cantidad: <input type="number" id="cantidadInput" value="1" min="1" onclick="this.select()" />
+  <div id="descripcionProducto" style="margin-top:10px; font-size:1.05rem; color:#0f0;"></div>
+  <button id="btnRegistrar">Registrar</button>
+  <hr>
+  <h3>📄 Inventario actual</h3>
+  <div id="tabla"></div>
+  <button id="btnExportar">Exportar CSV</button>
+  <button id="btnLimpiar" style="background:#b30000;">Limpiar inventario</button>
+</div>
+
+<script>
+/* ------------------------------
+   VARIABLES GLOBALES
+--------------------------------*/
+const video = document.getElementById('video');
+const statusDiv = document.getElementById('status');
+const descripcionDiv = document.getElementById('descripcionProducto');
+const toast = document.getElementById('toast');
+
+let maestro = {};
+let inventario = [];
+
+let ultimoCodigo = '';
+let detector = null;
+let puedeEscanear = true;
+
+let sesionConUbicacion = false;
+let ubicacionActual = '';
+
+/* ------------------------------
+   GUARDADO AUTOMÁTICO
+--------------------------------*/
+const STORAGE_KEY = 'inventario_industrial';
+
+function guardarInventario() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(inventario));
+}
+
+function cargarInventarioGuardado() {
+  const guardado = localStorage.getItem(STORAGE_KEY);
+  if (guardado) {
+    try {
+      inventario = JSON.parse(guardado);
+      if (inventario.length > 0) {
+        setTimeout(() => showToast(`📦 ${inventario.length} productos cargados`, 2000), 500);
+      }
+    } catch(e) {}
+  }
+}
+
+/* ------------------------------
+   BUSCADOR EN MAESTRO
+--------------------------------*/
+function buscarEnMaestro() {
+  const busqueda = document.getElementById('buscadorInput').value.trim().toLowerCase();
+  const resultadosDiv = document.getElementById('resultadosBusqueda');
+  
+  if (busqueda === '' || Object.keys(maestro).length === 0) {
+    resultadosDiv.style.display = 'none';
+    resultadosDiv.innerHTML = '';
+    return;
+  }
+  
+  const resultados = [];
+  for (const [codigoBarras, datos] of Object.entries(maestro)) {
+    if (codigoBarras.toLowerCase().includes(busqueda) || 
+        datos.nombreArticulo.toLowerCase().includes(busqueda) ||
+        datos.idArticulo.toLowerCase().includes(busqueda)) {
+      resultados.push({ 
+        codigoBarras, 
+        nombreArticulo: datos.nombreArticulo,
+        idArticulo: datos.idArticulo
+      });
+    }
+  }
+  
+  if (resultados.length === 0) {
+    resultadosDiv.innerHTML = '<div style="padding: 10px; text-align: center;">❌ No se encontraron productos</div>';
+    resultadosDiv.style.display = 'block';
+    return;
+  }
+  
+  let html = '';
+  resultados.forEach(res => {
+    html += `
+      <div class="resultado-item" onclick="seleccionarProductoMaestro('${res.codigoBarras.replace(/'/g, "\\'")}', '${res.nombreArticulo.replace(/'/g, "\\'")}')">
+        <span class="resultado-codigo">${res.idArticulo}</span>
+        <span class="resultado-descripcion">${res.nombreArticulo}</span>
+        <span style="font-size:0.8rem; color:#888;">${res.codigoBarras}</span>
+      </div>
+    `;
+  });
+  resultadosDiv.innerHTML = html;
+  resultadosDiv.style.display = 'block';
+}
+
+function seleccionarProductoMaestro(codigoBarras, nombreArticulo) {
+  ultimoCodigo = codigoBarras;
+  descripcionDiv.style.color = '#0f0';
+  descripcionDiv.textContent = '✔ ' + nombreArticulo;
+  
+  document.getElementById('buscadorInput').value = '';
+  document.getElementById('resultadosBusqueda').style.display = 'none';
+  document.getElementById('resultadosBusqueda').innerHTML = '';
+  
+  showToast(`✅ Seleccionado: ${nombreArticulo}`, 1500);
+  playBeep(1200, 0.06);
+}
+
+function limpiarBusquedaMaestro() {
+  document.getElementById('buscadorInput').value = '';
+  document.getElementById('resultadosBusqueda').style.display = 'none';
+  document.getElementById('resultadosBusqueda').innerHTML = '';
+}
+
+/* ------------------------------
+   MODO OSCURO/CLARO
+--------------------------------*/
+function toggleModo() {
+  const body = document.body;
+  const btn = document.getElementById('btnModo');
+  
+  if (body.classList.contains('modo-claro')) {
+    body.classList.remove('modo-claro');
+    btn.textContent = '🌞 Modo claro';
+    localStorage.setItem('modo_app', 'oscuro');
+  } else {
+    body.classList.add('modo-claro');
+    btn.textContent = '🌙 Modo oscuro';
+    localStorage.setItem('modo_app', 'claro');
+  }
+}
+
+function cargarModoGuardado() {
+  if (localStorage.getItem('modo_app') === 'claro') {
+    document.body.classList.add('modo-claro');
+    document.getElementById('btnModo').textContent = '🌙 Modo oscuro';
+  }
+}
+
+/* ------------------------------
+   AUDIO
+--------------------------------*/
+let audioCtx = null;
+let audioUnlocked = false;
+
+function crearAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+async function unlockAudioIfNeeded() {
+  if (audioUnlocked) return;
+  crearAudioContext();
+  try {
+    await audioCtx.resume();
+    audioUnlocked = true;
+    playBeep(1200, 0.06);
+    setTimeout(()=> playBeep(900, 0.06, 'square'), 120);
+    showToast('Sonido activado', 1100);
+  } catch (e) {
+    console.warn('No se pudo activar audio:', e);
+  }
+}
+
+function playBeep(freq = 1000, duration = 0.08, type = 'sine') {
+  if (!audioCtx || !audioUnlocked) return;
+  try {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = 0.0001;
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
+    o.start(now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    o.stop(now + duration + 0.02);
+  } catch (e) {
+    console.warn('playBeep error', e);
+  }
+}
+
+function showToast(text, ms = 1000) {
+  toast.textContent = text;
+  toast.style.display = 'block';
+  setTimeout(()=> { toast.style.display = 'none'; }, ms);
+}
+
+/* ------------------------------
+   SESIÓN
+--------------------------------*/
+function iniciarSesion(conUbicacion) {
+  unlockAudioIfNeeded();
+  sesionConUbicacion = conUbicacion;
+  
+  cargarInventarioGuardado();
+  
+  if (conUbicacion) {
+    document.getElementById('campoUbicacion').style.display = 'block';
+  } else {
+    document.getElementById('pantallaSesion').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    statusDiv.textContent = 'Cargando cámara…';
+    actualizarTabla();
+    iniciarCamara();
+  }
+}
+
+function confirmarUbicacion() {
+  unlockAudioIfNeeded();
+  const txt = document.getElementById('ubicacionInput').value.trim();
+  if (txt === '') {
+    alert('Introduce una ubicación válida.');
+    return;
+  }
+  ubicacionActual = txt;
+  document.getElementById('pantallaSesion').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  statusDiv.textContent = 'Cargando cámara…';
+  actualizarTabla();
+  iniciarCamara();
+}
+
+/* ------------------------------
+   CÁMARA
+--------------------------------*/
+async function iniciarCamara() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'environment' } } });
+    video.srcObject = stream;
+    statusDiv.textContent = 'Cámara activa';
+  } catch (e) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      statusDiv.textContent = 'Cámara activa (fallback)';
+    } catch (err) {
+      statusDiv.textContent = 'Error iniciando cámara';
+      console.error(err);
+    }
+  }
+}
+
 /* ------------------------------
    MAESTRO CSV - CORREGIDO (maneja tabs, espacios y formato científico)
 --------------------------------*/
@@ -80,3 +420,158 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
   };
   reader.readAsText(file);
 });
+
+/* ------------------------------
+   DETECTOR
+--------------------------------*/
+async function prepararDetector() {
+  if ('BarcodeDetector' in window) {
+    detector = new BarcodeDetector({ formats: ['ean_13','code_128','qr_code'] });
+  } else {
+    alert('BarcodeDetector no soportado en este dispositivo.');
+  }
+}
+prepararDetector();
+
+const lastDetected = new Map();
+const DETECT_DEBOUNCE_MS = 800;
+
+setInterval(async () => {
+  if (!detector || !puedeEscanear) return;
+  try {
+    const barcodes = await detector.detect(video);
+    if (barcodes.length > 0) {
+      const codigo = barcodes[0].rawValue;
+      const now = Date.now();
+      const last = lastDetected.get(codigo) || 0;
+      if (now - last > DETECT_DEBOUNCE_MS) {
+        lastDetected.set(codigo, now);
+        ultimoCodigo = codigo;
+        procesarCodigo(codigo);
+        if (audioUnlocked) playBeep(1200, 0.06);
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}, 250);
+
+function procesarCodigo(codigo) {
+  if (!maestro[codigo]) {
+    descripcionDiv.style.color = '#f00';
+    descripcionDiv.textContent = '❌ Código no encontrado en maestro';
+    return;
+  }
+  descripcionDiv.style.color = '#0f0';
+  descripcionDiv.textContent = '✔ ' + maestro[codigo].nombreArticulo;
+}
+
+/* ------------------------------
+   REGISTRAR
+--------------------------------*/
+document.getElementById('btnRegistrar').addEventListener('click', () => {
+  if (!ultimoCodigo || !maestro[ultimoCodigo]) {
+    alert('No hay código válido escaneado o seleccionado.');
+    return;
+  }
+  const cantidad = parseInt(document.getElementById('cantidadInput').value) || 1;
+  const datosMaestro = maestro[ultimoCodigo];
+  
+  const existente = inventario.find(item => item.codigoBarras === ultimoCodigo);
+  if (existente) {
+    existente.cantidad = Number(existente.cantidad) + Number(cantidad);
+  } else {
+    inventario.push({
+      idArticulo: datosMaestro.idArticulo,
+      nombreArticulo: datosMaestro.nombreArticulo,
+      codigoBarras: ultimoCodigo,
+      cantidad: cantidad,
+      stockActual: datosMaestro.stockActual || '0',
+      ubicacion: sesionConUbicacion ? ubicacionActual : ''
+    });
+  }
+  if (audioUnlocked) playBeep(900, 0.09, 'square');
+  guardarInventario();
+  actualizarTabla();
+  descripcionDiv.textContent = '';
+  ultimoCodigo = '';
+});
+
+/* ------------------------------
+   TABLA
+--------------------------------*/
+function actualizarTabla() {
+  let html = '<table>';
+  html += '<tr><th>ID Artículo</th><th>Nombre</th><th>Código Barras</th><th>Cantidad</th><th>Stock Actual</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
+  
+  if (inventario.length === 0) {
+    html += '<tr><td colspan="6" style="text-align:center">📭 Inventario vacío</td></tr>';
+  } else {
+    inventario.forEach(item => {
+      html += `<tr>
+        <td>${item.idArticulo}</td>
+        <td>${item.nombreArticulo}</td>
+        <td>${item.codigoBarras}</td>
+        <td>${item.cantidad}</td>
+        <td>${item.stockActual || '-'}</td>
+        ${sesionConUbicacion ? `<td>${item.ubicacion}</td>` : ''}
+      </tr>`;
+    });
+  }
+  
+  html += '</table>';
+  document.getElementById('tabla').innerHTML = html;
+}
+
+/* ------------------------------
+   EXPORTAR
+--------------------------------*/
+document.getElementById('btnExportar').addEventListener('click', () => {
+  let cabecera = 'IdArticulo,NombreArticulo,CodigoBarras,StockActual,Cantidad';
+  if (sesionConUbicacion) cabecera += ',Ubicacion';
+  cabecera += '\n';
+  
+  let csv = cabecera;
+  inventario.forEach(item => {
+    let linea = `${item.idArticulo},${item.nombreArticulo},${item.codigoBarras},${item.stockActual || '0'},${item.cantidad}`;
+    if (sesionConUbicacion) linea += `,${item.ubicacion}`;
+    csv += linea + '\n';
+  });
+  
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'inventario.csv';
+  a.click();
+  showToast('📄 Inventario exportado', 1500);
+});
+
+/* ------------------------------
+   LIMPIAR
+--------------------------------*/
+document.getElementById('btnLimpiar').addEventListener('click', () => {
+  if (confirm('¿Seguro que deseas borrar todo el inventario?')) {
+    inventario = [];
+    localStorage.removeItem(STORAGE_KEY);
+    actualizarTabla();
+  }
+});
+
+/* ------------------------------
+   EVENTOS BUSCADOR MAESTRO
+--------------------------------*/
+document.getElementById('btnBuscar').addEventListener('click', buscarEnMaestro);
+document.getElementById('btnLimpiarBusqueda').addEventListener('click', limpiarBusquedaMaestro);
+document.getElementById('buscadorInput').addEventListener('keyup', (e) => {
+  if (e.key === 'Enter') buscarEnMaestro();
+});
+
+/* ------------------------------
+   INICIALIZACIÓN
+--------------------------------*/
+crearAudioContext();
+cargarModoGuardado();
+</script>
+</body>
+</html>
