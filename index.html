@@ -79,12 +79,13 @@
   <video id="video" autoplay playsinline></video>
   <hr>
   <h3>📁 Cargar maestro CSV</h3>
+  <p style="font-size:0.85rem; color:#aaa;">Formato: IdArticulo,NombreArticulo,CodigoBarras,StockActual</p>
   <input type="file" id="fileInput" accept=".csv" />
   
   <!-- BUSCADOR EN MAESTRO -->
   <h3>🔍 Buscar producto en catálogo</h3>
   <div class="buscador-container">
-    <input type="text" id="buscadorInput" placeholder="Buscar por código o descripción..." />
+    <input type="text" id="buscadorInput" placeholder="Buscar por código o nombre..." />
     <button id="btnBuscar">Buscar</button>
     <button id="btnLimpiarBusqueda" style="background:#555;">Limpiar</button>
   </div>
@@ -110,7 +111,7 @@ const statusDiv = document.getElementById('status');
 const descripcionDiv = document.getElementById('descripcionProducto');
 const toast = document.getElementById('toast');
 
-let maestro = {};
+let maestro = {}; // clave: codigoBarras, valor: { idArticulo, nombreArticulo, stockActual }
 let inventario = [];
 
 let ultimoCodigo = '';
@@ -155,9 +156,15 @@ function buscarEnMaestro() {
   }
   
   const resultados = [];
-  for (const [codigo, descripcion] of Object.entries(maestro)) {
-    if (codigo.toLowerCase().includes(busqueda) || descripcion.toLowerCase().includes(busqueda)) {
-      resultados.push({ codigo, descripcion });
+  for (const [codigoBarras, datos] of Object.entries(maestro)) {
+    if (codigoBarras.toLowerCase().includes(busqueda) || 
+        datos.nombreArticulo.toLowerCase().includes(busqueda) ||
+        datos.idArticulo.toLowerCase().includes(busqueda)) {
+      resultados.push({ 
+        codigoBarras, 
+        nombreArticulo: datos.nombreArticulo,
+        idArticulo: datos.idArticulo
+      });
     }
   }
   
@@ -170,9 +177,10 @@ function buscarEnMaestro() {
   let html = '';
   resultados.forEach(res => {
     html += `
-      <div class="resultado-item" onclick="seleccionarProductoMaestro('${res.codigo.replace(/'/g, "\\'")}', '${res.descripcion.replace(/'/g, "\\'")}')">
-        <span class="resultado-codigo">${res.codigo}</span>
-        <span class="resultado-descripcion">${res.descripcion}</span>
+      <div class="resultado-item" onclick="seleccionarProductoMaestro('${res.codigoBarras.replace(/'/g, "\\'")}', '${res.nombreArticulo.replace(/'/g, "\\'")}')">
+        <span class="resultado-codigo">${res.idArticulo}</span>
+        <span class="resultado-descripcion">${res.nombreArticulo}</span>
+        <span style="font-size:0.8rem; color:#888;">${res.codigoBarras}</span>
       </div>
     `;
   });
@@ -180,16 +188,16 @@ function buscarEnMaestro() {
   resultadosDiv.style.display = 'block';
 }
 
-function seleccionarProductoMaestro(codigo, descripcion) {
-  ultimoCodigo = codigo;
+function seleccionarProductoMaestro(codigoBarras, nombreArticulo) {
+  ultimoCodigo = codigoBarras;
   descripcionDiv.style.color = '#0f0';
-  descripcionDiv.textContent = '✔ ' + descripcion;
+  descripcionDiv.textContent = '✔ ' + nombreArticulo;
   
   document.getElementById('buscadorInput').value = '';
   document.getElementById('resultadosBusqueda').style.display = 'none';
   document.getElementById('resultadosBusqueda').innerHTML = '';
   
-  showToast(`✅ Seleccionado: ${descripcion}`, 1500);
+  showToast(`✅ Seleccionado: ${nombreArticulo}`, 1500);
   playBeep(1200, 0.06);
 }
 
@@ -331,7 +339,7 @@ async function iniciarCamara() {
 }
 
 /* ------------------------------
-   MAESTRO CSV
+   MAESTRO CSV (NUEVO FORMATO: IdArticulo,NombreArticulo,CodigoBarras,StockActual)
 --------------------------------*/
 document.getElementById('fileInput').addEventListener('change', function(e) {
   const file = e.target.files[0];
@@ -342,11 +350,19 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
     const lines = text.split('\n').filter(l => l.trim() !== '');
     maestro = {};
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',');
-      if (cols.length >= 2) {
-        const codigo = cols[0].trim();
-        const descripcion = cols[1].trim();
-        if (codigo) maestro[codigo] = descripcion;
+      const cols = lines[i].split(',').map(c => c.trim());
+      if (cols.length >= 4) {
+        const idArticulo = cols[0];
+        const nombreArticulo = cols[1];
+        const codigoBarras = cols[2];
+        const stockActual = cols[3];
+        if (codigoBarras) {
+          maestro[codigoBarras] = { 
+            idArticulo, 
+            nombreArticulo, 
+            stockActual 
+          };
+        }
       }
     }
     alert('Maestro cargado correctamente. Productos: ' + Object.keys(maestro).length);
@@ -396,7 +412,7 @@ function procesarCodigo(codigo) {
     return;
   }
   descripcionDiv.style.color = '#0f0';
-  descripcionDiv.textContent = '✔ ' + maestro[codigo];
+  descripcionDiv.textContent = '✔ ' + maestro[codigo].nombreArticulo;
 }
 
 /* ------------------------------
@@ -408,14 +424,18 @@ document.getElementById('btnRegistrar').addEventListener('click', () => {
     return;
   }
   const cantidad = parseInt(document.getElementById('cantidadInput').value) || 1;
-  const existente = inventario.find(item => item.codigo === ultimoCodigo);
+  const datosMaestro = maestro[ultimoCodigo];
+  
+  const existente = inventario.find(item => item.codigoBarras === ultimoCodigo);
   if (existente) {
     existente.cantidad = Number(existente.cantidad) + Number(cantidad);
   } else {
     inventario.push({
-      codigo: ultimoCodigo,
-      descripcion: maestro[ultimoCodigo],
-      cantidad,
+      idArticulo: datosMaestro.idArticulo,
+      nombreArticulo: datosMaestro.nombreArticulo,
+      codigoBarras: ultimoCodigo,
+      cantidad: cantidad,
+      stockActual: datosMaestro.stockActual || '0',
       ubicacion: sesionConUbicacion ? ubicacionActual : ''
     });
   }
@@ -427,20 +447,22 @@ document.getElementById('btnRegistrar').addEventListener('click', () => {
 });
 
 /* ------------------------------
-   TABLA (CORREGIDA - texto vacío bien mostrado)
+   TABLA (NUEVO FORMATO)
 --------------------------------*/
 function actualizarTabla() {
   let html = '<table>';
-  html += '<tr><th>Código</th><th>Descripción</th><th>Cantidad</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
+  html += '<tr><th>ID Artículo</th><th>Nombre</th><th>Código Barras</th><th>Cantidad</th><th>Stock Actual</th>' + (sesionConUbicacion ? '<th>Ubicación</th>' : '') + '</tr>';
   
   if (inventario.length === 0) {
-    html += '<tr><td colspan="3" style="text-align:center">📭 Inventario vacío</td></tr>';
+    html += '<tr><td colspan="6" style="text-align:center">📭 Inventario vacío</td></tr>';
   } else {
     inventario.forEach(item => {
       html += `<tr>
-        <td>${item.codigo}</td>
-        <td>${item.descripcion}</td>
+        <td>${item.idArticulo}</td>
+        <td>${item.nombreArticulo}</td>
+        <td>${item.codigoBarras}</td>
         <td>${item.cantidad}</td>
+        <td>${item.stockActual || '-'}</td>
         ${sesionConUbicacion ? `<td>${item.ubicacion}</td>` : ''}
       </tr>`;
     });
@@ -451,19 +473,27 @@ function actualizarTabla() {
 }
 
 /* ------------------------------
-   EXPORTAR
+   EXPORTAR (NUEVO FORMATO: IdArticulo,NombreArticulo,CodigoBarras,StockActual,Cantidad,Ubicacion)
 --------------------------------*/
 document.getElementById('btnExportar').addEventListener('click', () => {
-  let csv = sesionConUbicacion ? 'codigo,descripcion,cantidad,ubicacion\n' : 'codigo,descripcion,cantidad\n';
+  let cabecera = 'IdArticulo,NombreArticulo,CodigoBarras,StockActual,Cantidad';
+  if (sesionConUbicacion) cabecera += ',Ubicacion';
+  cabecera += '\n';
+  
+  let csv = cabecera;
   inventario.forEach(item => {
-    csv += sesionConUbicacion ? `${item.codigo},${item.descripcion},${item.cantidad},${item.ubicacion}\n` : `${item.codigo},${item.descripcion},${item.cantidad}\n`;
+    let linea = `${item.idArticulo},${item.nombreArticulo},${item.codigoBarras},${item.stockActual || '0'},${item.cantidad}`;
+    if (sesionConUbicacion) linea += `,${item.ubicacion}`;
+    csv += linea + '\n';
   });
+  
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = 'inventario.csv';
   a.click();
+  showToast('📄 Inventario exportado', 1500);
 });
 
 /* ------------------------------
